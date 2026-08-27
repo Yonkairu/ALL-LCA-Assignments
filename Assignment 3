@@ -1,1 +1,24 @@
 
+lenght1 = float(input("Enter first lenght of the triangle:"))
+lenght2 = float(input("Enter second lenght of the triangle:"))
+lenght3 = float(input("Enter third lenght of the triangle:"))
+
+
+if lenght1 >= lenght2 and lenght1 >= lenght3:
+    largest = lenght1
+    side1 = lenght2
+    side2 = lenght3
+elif lenght2 >= lenght1 and lenght2 >= lenght3:
+    largest = lenght2
+    side1 = lenght1
+    side2 = lenght3
+else:
+    largest = lenght3
+    side1 = lenght1
+    side2 = lenght2
+
+
+if pow(side1, 2) + pow(side2, 2) == pow(largest, 2):
+    print("The triangle is a right angled triangle")
+else:
+    print("The triangle is not a right angled triangle")
