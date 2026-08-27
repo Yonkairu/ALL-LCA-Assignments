@@ -1,1 +1,119 @@
 
+students = []  
+
+subjects = ("Math", "Science", "English")  
+
+
+def add_student():
+    print("\n--- Add New Student ---")
+    roll_no = input("Enter roll number: ")
+    name = input("Enter name: ")
+    branch = input("Enter branch: ")
+
+    marks = {}
+    for subject in subjects:
+        mark = float(input("Enter marks in " + subject + ": "))
+        marks[subject] = mark
+
+    student = {
+        "roll_no": roll_no,
+        "name": name,
+        "branch": branch,
+        "marks": marks
+    }
+
+    students.append(student)
+    print("Student added successfully!\n")
+
+
+def delete_student():
+    print("\n--- Delete Student ---")
+    roll_no = input("Enter roll number to delete: ")
+
+    found = False
+    for student in students:
+        if student["roll_no"] == roll_no:
+            students.remove(student)
+            found = True
+            print("Student deleted successfully!\n")
+            break
+
+    if not found:
+        print("Student with this roll number not found.\n")
+
+
+def update_student():
+    print("\n--- Update Student ---")
+    roll_no = input("Enter roll number to update: ")
+
+    found = False
+    for student in students:
+        if student["roll_no"] == roll_no:
+            found = True
+            print("Leave blank if you don't want to change a value.")
+
+            new_name = input("Enter new name (" + student["name"] + "): ")
+            if new_name != "":
+                student["name"] = new_name
+
+            new_branch = input("Enter new branch (" + student["branch"] + "): ")
+            if new_branch != "":
+                student["branch"] = new_branch
+
+            for subject in subjects:
+                new_mark = input("Enter new marks in " + subject + " (" + str(student["marks"][subject]) + "): ")
+                if new_mark != "":
+                    student["marks"][subject] = float(new_mark)
+
+            print("Student updated successfully!\n")
+            break
+
+    if not found:
+        print("Student with this roll number not found.\n")
+
+
+def display_students():
+    print("\n--- Final Student Records ---")
+
+    if len(students) == 0:
+        print("No student records found.\n")
+        return
+
+    for student in students:
+        print("-" * 30)
+        print("Roll No :", student["roll_no"])
+        print("Name    :", student["name"])
+        print("Branch  :", student["branch"])
+        print("Marks   :")
+        for subject in subjects:
+            print("   " + subject + ":", student["marks"][subject])
+    print("-" * 30)
+
+
+def main():
+    while True:
+        print("\n===== Student Management Menu =====")
+        print("1. Add a new student record")
+        print("2. Delete an existing student record")
+        print("3. Update details of a student")
+        print("4. Display final student records")
+        print("5. Exit")
+
+        choice = input("Enter your choice (1-5): ")
+
+        if choice == "1":
+            add_student()
+        elif choice == "2":
+            delete_student()
+        elif choice == "3":
+            update_student()
+        elif choice == "4":
+            display_students()
+        elif choice == "5":
+            print("Exiting program. Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.\n")
+
+
+main()
