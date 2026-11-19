@@ -1,1 +1,215 @@
 
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# A clean, nice-looking default style for all plots
+sns.set_theme(style="whitegrid")
+
+PLOTS_FOLDER = "plots"
+
+
+# ------------------------------------------------------------
+# Load the file
+# ------------------------------------------------------------
+def load_data(file_path):
+    """Read a CSV or Excel file into a pandas DataFrame."""
+    extension = os.path.splitext(file_path)[1].lower()
+
+    if extension == ".csv":
+        try:
+            df = pd.read_csv(file_path)
+        except UnicodeDecodeError:
+            df = pd.read_csv(file_path, encoding="latin-1")
+    elif extension in [".xls", ".xlsx"]:
+        df = pd.read_excel(file_path)
+    else:
+        raise ValueError("Unsupported file type! Please use .csv, .xls or .xlsx")
+
+    print(f"\n✅ File loaded: {file_path}")
+    print(f"   Rows: {df.shape[0]}  |  Columns: {df.shape[1]}")
+    print("\nFirst 5 rows:")
+    print(df.head())
+    return df
+
+
+# ------------------------------------------------------------
+# Helper: let the user pick a column by number
+# ------------------------------------------------------------
+def choose_column(options, message, default):
+    """
+    Show a numbered list of options.
+    The user types a number, or just presses Enter to use the default.
+    """
+    print(f"\n{message}")
+    for number, name in enumerate(options, start=1):
+        print(f"  {number}. {name}")
+
+    answer = input(f"Enter a number (or press Enter for '{default}'): ").strip()
+
+    if answer == "":
+        return default
+    if answer.isdigit() and 1 <= int(answer) <= len(options):
+        return options[int(answer) - 1]
+
+    print(f"Invalid choice, using '{default}' instead.")
+    return default
+
+
+# ------------------------------------------------------------
+# Helper: save a figure as an image
+# ------------------------------------------------------------
+def save_figure(file_name):
+    os.makedirs(PLOTS_FOLDER, exist_ok=True)
+    path = os.path.join(PLOTS_FOLDER, file_name)
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    print(f"💾 Saved: {path}")
+
+
+# ------------------------------------------------------------
+# PLOT 1: Line plot
+# ------------------------------------------------------------
+def make_line_plot(df, numeric_columns):
+    """Shows how a numeric column changes along the x-axis."""
+    x_options = ["(row number)"] + df.columns.tolist()
+    x_name = choose_column(x_options, "LINE PLOT - choose the X axis:", "(row number)")
+    y_name = choose_column(numeric_columns, "LINE PLOT - choose the Y axis (numeric):", numeric_columns[0])
+
+    if x_name == "(row number)":
+        x_values = df.index
+    else:
+        # Sort by x so the line goes left to right nicely
+        df = df.sort_values(by=x_name)
+        x_values = df[x_name]
+
+    plt.figure(figsize=(9, 5))
+    plt.plot(x_values, df[y_name], color="steelblue", linewidth=2)
+    plt.title(f"Line Plot: {y_name}")
+    plt.xlabel(x_name)
+    plt.ylabel(y_name)
+    save_figure("1_line_plot.png")
+
+
+# ------------------------------------------------------------
+# PLOT 2: Bar plot
+# ------------------------------------------------------------
+def make_bar_plot(df, numeric_columns, category_columns):
+    """Shows the AVERAGE of a numeric column for each category."""
+    if not category_columns:
+        print("\n⚠️ Skipping bar plot: no category (text) columns found.")
+        return
+
+    cat_name = choose_column(category_columns, "BAR PLOT - choose the category column:", category_columns[0])
+    y_name = choose_column(numeric_columns, "BAR PLOT - choose the numeric column to average:", numeric_columns[0])
+
+    # Keep only the 10 most common categories so the plot stays readable
+    top_categories = df[cat_name].value_counts().head(10).index
+    plot_data = df[df[cat_name].isin(top_categories)]
+
+    plt.figure(figsize=(9, 5))
+    sns.barplot(data=plot_data, x=cat_name, y=y_name, errorbar=None, palette="viridis", hue=cat_name, legend=False)
+    plt.title(f"Bar Plot: Average {y_name} by {cat_name}")
+    plt.xticks(rotation=45, ha="right")
+    save_figure("2_bar_plot.png")
+
+
+# ------------------------------------------------------------
+# PLOT 3: Scatter plot
+# ------------------------------------------------------------
+def make_scatter_plot(df, numeric_columns, category_columns):
+    """Shows the relationship between two numeric columns."""
+    if len(numeric_columns) < 2:
+        print("\n⚠️ Skipping scatter plot: need at least 2 numeric columns.")
+        return
+
+    x_name = choose_column(numeric_columns, "SCATTER PLOT - choose the X axis:", numeric_columns[0])
+    y_name = choose_column(numeric_columns, "SCATTER PLOT - choose the Y axis:", numeric_columns[1])
+
+    # Optional: color the dots by a category (only columns with few unique values)
+    small_categories = [c for c in category_columns if df[c].nunique() <= 10]
+    hue_name = None
+    if small_categories:
+        hue_options = ["(none)"] + small_categories
+        choice = choose_column(hue_options, "SCATTER PLOT - color the dots by (optional):", "(none)")
+        if choice != "(none)":
+            hue_name = choice
+
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(data=df, x=x_name, y=y_name, hue=hue_name, alpha=0.7, s=60)
+    plt.title(f"Scatter Plot: {x_name} vs {y_name}")
+    save_figure("3_scatter_plot.png")
+
+
+# ------------------------------------------------------------
+# PLOT 4: Heatmap
+# ------------------------------------------------------------
+def make_heatmap(df, numeric_columns):
+    """
+    Shows how strongly numeric columns are related to each other.
+    +1 = move together, -1 = move opposite, 0 = no relationship.
+    """
+    if len(numeric_columns) < 2:
+        print("\n⚠️ Skipping heatmap: need at least 2 numeric columns.")
+        return
+
+    # Use at most 15 columns so the heatmap stays readable
+    columns_to_use = numeric_columns[:15]
+    correlation = df[columns_to_use].corr()
+
+    plt.figure(figsize=(9, 7))
+    sns.heatmap(
+        correlation,
+        annot=len(columns_to_use) <= 12,  # write numbers inside boxes if not too crowded
+        fmt=".2f",
+        cmap="coolwarm",
+        vmin=-1,
+        vmax=1,
+        square=True,
+    )
+    plt.title("Correlation Heatmap")
+    save_figure("4_heatmap.png")
+
+
+# ------------------------------------------------------------
+# MAIN PROGRAM
+# ------------------------------------------------------------
+def main():
+    print("=" * 50)
+    print("   DATA VISUALIZATION TOOL")
+    print("=" * 50)
+
+    file_path = input("Enter the path of your .csv/.xls/.xlsx file: ").strip().strip('"')
+
+    if not os.path.exists(file_path):
+        print("❌ File not found. Please check the path and try again.")
+        return
+
+    df = load_data(file_path)
+
+    # Split columns into numbers and categories (text / true-false)
+    numeric_columns = df.select_dtypes(include="number").columns.tolist()
+    category_columns = df.select_dtypes(exclude=["number", "datetime"]).columns.tolist()
+
+    if not numeric_columns:
+        print("❌ This file has no numeric columns, so there is nothing to plot.")
+        return
+
+    print(f"\nNumeric columns:  {numeric_columns}")
+    print(f"Category columns: {category_columns}")
+
+    # Draw all four plots
+    make_line_plot(df, numeric_columns)
+    make_bar_plot(df, numeric_columns, category_columns)
+    make_scatter_plot(df, numeric_columns, category_columns)
+    make_heatmap(df, numeric_columns)
+
+    print(f"\n🎉 Done! All images are in the '{PLOTS_FOLDER}' folder.")
+
+    # Show all the plots on screen (close the windows to finish)
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
