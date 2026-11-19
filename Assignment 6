@@ -1,1 +1,244 @@
 
+import os
+import pandas as pd
+
+
+# ------------------------------------------------------------
+# STEP 1: Load the file
+# ------------------------------------------------------------
+def load_data(file_path):
+    """Read a CSV or Excel file into a pandas DataFrame."""
+    extension = os.path.splitext(file_path)[1].lower()
+
+    if extension == ".csv":
+        try:
+            df = pd.read_csv(file_path)
+        except UnicodeDecodeError:
+            # Some CSV files use a different text encoding
+            df = pd.read_csv(file_path, encoding="latin-1")
+    elif extension in [".xls", ".xlsx"]:
+        df = pd.read_excel(file_path)
+    else:
+        raise ValueError("Unsupported file type! Please use .csv, .xls or .xlsx")
+
+    print(f"\n✅ File loaded: {file_path}")
+    return df
+
+
+# ------------------------------------------------------------
+# STEP 2: Overview of the data
+# ------------------------------------------------------------
+def show_overview(df, title="DATA OVERVIEW"):
+    """Print basic information about the data."""
+    print("\n" + "=" * 50)
+    print(title)
+    print("=" * 50)
+    print(f"Rows: {df.shape[0]}  |  Columns: {df.shape[1]}")
+
+    print("\n--- First 5 rows ---")
+    print(df.head())
+
+    print("\n--- Column types ---")
+    print(df.dtypes)
+
+    print("\n--- Missing values per column ---")
+    print(df.isnull().sum())
+
+    print(f"\n--- Duplicate rows: {df.duplicated().sum()} ---")
+
+
+# ------------------------------------------------------------
+# STEP 3: Clean column names
+# ------------------------------------------------------------
+def clean_column_names(df):
+    """Make column names lowercase with underscores (e.g. 'Student Name' -> 'student_name')."""
+    df.columns = (
+        df.columns.str.strip()          # remove extra spaces
+        .str.lower()                    # lowercase
+        .str.replace(" ", "_")          # spaces -> underscores
+        .str.replace(r"[^\w]", "", regex=True)  # remove special characters
+    )
+    print("\n✅ Column names cleaned")
+    return df
+
+
+# ------------------------------------------------------------
+# STEP 4: Remove duplicates
+# ------------------------------------------------------------
+def remove_duplicates(df):
+    """Delete rows that are exact copies of other rows."""
+    before = len(df)
+    df = df.drop_duplicates()
+    print(f"\n✅ Removed {before - len(df)} duplicate row(s)")
+    return df
+
+
+# ------------------------------------------------------------
+# STEP 5: Handle missing values
+# ------------------------------------------------------------
+def handle_missing_values(df, drop_threshold=0.5):
+    """
+    - Drop columns that are mostly empty (more than 50% missing)
+    - Fill missing numbers with the MEDIAN
+    - Fill missing text with the MOST COMMON value (mode)
+    """
+    # Drop columns with too many missing values
+    missing_ratio = df.isnull().mean()
+    columns_to_drop = missing_ratio[missing_ratio > drop_threshold].index.tolist()
+    if columns_to_drop:
+        df = df.drop(columns=columns_to_drop)
+        print(f"\n✅ Dropped columns with >{int(drop_threshold * 100)}% missing: {columns_to_drop}")
+
+    # Fill remaining missing values
+    for column in df.columns:
+        if df[column].isnull().sum() == 0:
+            continue  # nothing to fix here
+
+        if pd.api.types.is_numeric_dtype(df[column]):
+            df[column] = df[column].fillna(df[column].median())
+        else:
+            df[column] = df[column].fillna(df[column].mode()[0])
+
+    print("✅ Missing values filled")
+    return df
+
+
+# ------------------------------------------------------------
+# STEP 6: Handle outliers (IQR method)
+# ------------------------------------------------------------
+def handle_outliers(df):
+    """
+    Cap extreme values in numeric columns.
+    Anything far outside the normal range is pulled back to the limit.
+    """
+    numeric_columns = df.select_dtypes(include="number").columns
+
+    for column in numeric_columns:
+        q1 = df[column].quantile(0.25)
+        q3 = df[column].quantile(0.75)
+        iqr = q3 - q1
+
+        lower_limit = q1 - 1.5 * iqr
+        upper_limit = q3 + 1.5 * iqr
+
+        df[column] = df[column].clip(lower=lower_limit, upper=upper_limit)
+
+    print("\n✅ Outliers capped in numeric columns")
+    return df
+
+
+# ------------------------------------------------------------
+# STEP 7: Encode text (categorical) columns
+# ------------------------------------------------------------
+def encode_categorical(df):
+    """
+    Turn text columns into numbers using One-Hot Encoding.
+    Example: color = red/blue  ->  color_blue = 0/1
+    """
+    # Any column that is not a number, True/False, or a date is treated as text
+    text_columns = df.select_dtypes(exclude=["number", "bool", "datetime"]).columns.tolist()
+
+    if not text_columns:
+        print("\nℹ️ No text columns to encode")
+        return df
+
+    df = pd.get_dummies(df, columns=text_columns, drop_first=True, dtype=int)
+    print(f"\n✅ Encoded text columns: {text_columns}")
+    return df
+
+
+# ------------------------------------------------------------
+# STEP 8: Scale numeric columns
+# ------------------------------------------------------------
+def scale_numeric(df, method="standard"):
+    """
+    standard -> mean = 0, spread = 1   (z-score)
+    minmax   -> all values between 0 and 1
+    """
+    # Only scale columns that have more than 2 unique values
+    # (this skips 0/1 columns created by encoding)
+    numeric_columns = [
+        col for col in df.select_dtypes(include="number").columns
+        if df[col].nunique() > 2
+    ]
+
+    for column in numeric_columns:
+        if method == "standard":
+            std = df[column].std()
+            if std != 0:
+                df[column] = (df[column] - df[column].mean()) / std
+        elif method == "minmax":
+            col_range = df[column].max() - df[column].min()
+            if col_range != 0:
+                df[column] = (df[column] - df[column].min()) / col_range
+
+    print(f"\n✅ Scaled {len(numeric_columns)} numeric column(s) using '{method}' method")
+    return df
+
+
+# ------------------------------------------------------------
+# STEP 9: Save the result
+# ------------------------------------------------------------
+def save_data(df, original_path):
+    """Save the cleaned data as a new CSV file next to the original."""
+    folder, filename = os.path.split(original_path)
+    name_only = os.path.splitext(filename)[0]
+    output_path = os.path.join(folder, f"{name_only}_cleaned.csv")
+
+    df.to_csv(output_path, index=False)
+    print(f"\n💾 Cleaned file saved as: {output_path}")
+
+
+# ------------------------------------------------------------
+# Helper: ask a yes/no question
+# ------------------------------------------------------------
+def ask_yes_no(question):
+    answer = input(f"{question} (y/n): ").strip().lower()
+    return answer == "y"
+
+
+# ------------------------------------------------------------
+# MAIN PROGRAM
+# ------------------------------------------------------------
+def main():
+    print("=" * 50)
+    print("   DATA PREPROCESSING TOOL")
+    print("=" * 50)
+
+    # Ask for the file
+    file_path = input("Enter the path of your .csv/.xls/.xlsx file: ").strip().strip('"')
+
+    if not os.path.exists(file_path):
+        print("❌ File not found. Please check the path and try again.")
+        return
+
+    # Load + look at the data
+    df = load_data(file_path)
+    show_overview(df, "BEFORE PREPROCESSING")
+
+    # Always-on steps
+    df = clean_column_names(df)
+    df = remove_duplicates(df)
+    df = handle_missing_values(df)
+
+    # Optional steps
+    if ask_yes_no("\nCap outliers in numeric columns?"):
+        df = handle_outliers(df)
+
+    if ask_yes_no("Convert text columns to numbers (one-hot encoding)?"):
+        df = encode_categorical(df)
+
+    if ask_yes_no("Scale numeric columns?"):
+        choice = input("Type 'standard' or 'minmax' [default: standard]: ").strip().lower()
+        method = "minmax" if choice == "minmax" else "standard"
+        df = scale_numeric(df, method)
+
+    # Show the result and save
+    show_overview(df, "AFTER PREPROCESSING")
+    save_data(df, file_path)
+
+    print("\n🎉 Done!")
+
+
+if __name__ == "__main__":
+    main()
